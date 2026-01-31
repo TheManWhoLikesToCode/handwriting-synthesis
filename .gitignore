@@ -5,3 +5,6 @@ data/processed
 
 logs
 predictions
+/data
+/__pycache__
+.DS_Store
