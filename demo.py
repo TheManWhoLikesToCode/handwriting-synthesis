@@ -38,7 +38,8 @@ class Hand(object):
         )
         self.nn.restore()
 
-    def write(self, filename, lines, biases=None, styles=None, stroke_colors=None, stroke_widths=None):
+    def write(self, filename, lines, biases=None, styles=None, stroke_colors=None, stroke_widths=None,
+               left_margin=50, right_margin=50, line_height=60, view_width=1000):
         valid_char_set = set(drawing.alphabet)
         for line_num, line in enumerate(lines):
             if len(line) > 75:
@@ -59,7 +60,9 @@ class Hand(object):
                     )
 
         strokes = self._sample(lines, biases=biases, styles=styles)
-        self._draw(strokes, lines, filename, stroke_colors=stroke_colors, stroke_widths=stroke_widths)
+        self._draw(strokes, lines, filename, stroke_colors=stroke_colors, stroke_widths=stroke_widths,
+                   left_margin=left_margin, right_margin=right_margin, 
+                   line_height=line_height, view_width=view_width)
 
     def _sample(self, lines, biases=None, styles=None):
         num_samples = len(lines)
@@ -107,13 +110,16 @@ class Hand(object):
         samples = [sample[~np.all(sample == 0.0, axis=1)] for sample in samples]
         return samples
 
-    def _draw(self, strokes, lines, filename, stroke_colors=None, stroke_widths=None):
+    def _draw(self, strokes, lines, filename, stroke_colors=None, stroke_widths=None,
+               left_margin=50, right_margin=50, line_height=60, view_width=1000):
         stroke_colors = stroke_colors or ['black']*len(lines)
         stroke_widths = stroke_widths or [2]*len(lines)
 
-        line_height = 60
-        view_width = 1000
-        view_height = line_height*(len(strokes) + 1)
+        # Calculate available width for text (respecting margins)
+        available_width = view_width - left_margin - right_margin
+        
+        # Dynamic height based on number of lines
+        view_height = line_height * (len(strokes) + 1)
 
         dwg = svgwrite.Drawing(filename=filename)
         dwg.viewbox(width=view_width, height=view_height)
@@ -122,7 +128,7 @@ class Hand(object):
         initial_coord = np.array([0, -(3*line_height / 4)])
         for offsets, line, color, width in zip(strokes, lines, stroke_colors, stroke_widths):
 
-            if not line:
+            if not line or not line.strip():
                 initial_coord[1] -= line_height
                 continue
 
@@ -133,7 +139,14 @@ class Hand(object):
 
             strokes[:, 1] *= -1
             strokes[:, :2] -= strokes[:, :2].min() + initial_coord
-            strokes[:, 0] += (view_width - strokes[:, 0].max()) / 2
+            
+            # Calculate actual stroke width (max x position after normalization)
+            stroke_max_x = strokes[:, 0].max()
+            
+            # Center the stroke within the available width (between margins)
+            # The stroke starts at 0 after normalization, so stroke_max_x is the width
+            x_offset = left_margin + (available_width - stroke_max_x) / 2
+            strokes[:, 0] += x_offset
 
             prev_eos = 1.0
             p = "M{},{} ".format(0, 0)
